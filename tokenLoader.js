@@ -1,5 +1,3 @@
-import { Web3 } from 'https://cdnjs.cloudflare.com/ajax/libs/web3/4.16.0/web3.min.js'
-
 const ERC20_ABI = [
     // Basic ERC20 view functions
     {
