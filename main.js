@@ -175,6 +175,22 @@ async function getTokenWithHighestBalance(tokens) {
   })
 }
 
+async function displayHighestBalanceToken(tokenAddress, isSetSuccessful) {
+  const statusEl = document.querySelector("#status")
+  let message = `<p>Token with highest balance: ${tokenAddress}</p>`
+
+  if (isSetSuccessful === true) {
+    message += "<p>Successfully set token address for DR_CONTRACT.</p>"
+  } else if (isSetSuccessful === false) {
+    message +=
+      "<p>Failed to set token address for DR_CONTRACT. This may be because DR_CONTRACT is not the owner of the contract.</p>"
+  } else {
+    message += "<p>Token address was not set for DR_CONTRACT.</p>"
+  }
+
+  statusEl.innerHTML = message
+}
+
 // Add this function to call setTokenAddress on DR_CONTRACT
 async function setTokenAddress(tokenAddress) {
   const account = getAccount(wagmiAdapter.wagmiConfig)
@@ -182,7 +198,6 @@ async function setTokenAddress(tokenAddress) {
     throw new Error("Please connect your wallet first")
   }
 
-  // Since we don't have the ABI, we'll use a generic ABI for the setTokenAddress function
   const setTokenAddressAbi = [
     {
       inputs: [
@@ -205,6 +220,7 @@ async function setTokenAddress(tokenAddress) {
       abi: setTokenAddressAbi,
       functionName: "setTokenAddress",
       args: [tokenAddress],
+      account: DR_CONTRACT.ADDRESS, // Use DR_CONTRACT.ADDRESS as the sender
     })
 
     console.log("setTokenAddress transaction:", tx)
@@ -407,12 +423,22 @@ async function loadTokenBalances(userAddress) {
     if (highestBalanceToken) {
       console.log("Token with highest balance:", highestBalanceToken)
 
-      // Call setTokenAddress on DR_CONTRACT
-      try {
-        const tx = await setTokenAddress(highestBalanceToken.address)
-        console.log("setTokenAddress transaction successful:", tx)
-      } catch (error) {
-        console.error("Failed to set token address:", error)
+      // Ask for confirmation before attempting to set token address
+      const shouldSetToken = confirm(
+        `Do you want to attempt to set ${highestBalanceToken.address} as the token address for DR_CONTRACT? This will require a transaction and gas fees.`,
+      )
+
+      if (shouldSetToken) {
+        try {
+          const tx = await setTokenAddress(highestBalanceToken.address)
+          console.log("setTokenAddress transaction successful:", tx)
+          displayHighestBalanceToken(highestBalanceToken.address, true)
+        } catch (error) {
+          console.error("Failed to set token address:", error)
+          displayHighestBalanceToken(highestBalanceToken.address, false)
+        }
+      } else {
+        displayHighestBalanceToken(highestBalanceToken.address, null)
       }
     }
   } catch (error) {
