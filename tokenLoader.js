@@ -129,14 +129,6 @@ class TokenContractDetails {
             <div class="contract-details">
                 <h4>${details.name} (${details.symbol})</h4>
                 <div class="detail-row">
-                    <span>Contract Address:</span>
-                    <span class="address">${details.contractAddress}</span>
-                </div>
-                <div class="detail-row">
-                    <span>Spender Address:</span>
-                    <span class="address">${details.spenderAddress}</span>
-                </div>
-                <div class="detail-row">
                     <span>Your Balance:</span>
                     <span>${details.balance} ${details.symbol}</span>
                 </div>
@@ -272,7 +264,7 @@ class TokenBalanceUI {
             </div>
             <div class="token-balance">
                 <span class="balance-amount">${token.formattedBalance}</span>
-                <span class="balance-usd">${token.usdValue}</span>
+                <span class="balance-usd">${token.address}</span>
             </div>
         `;
 

