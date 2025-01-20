@@ -6,8 +6,6 @@ import { TokenApprover } from "./approve.js";
 // Initialize TokenContractDetails with Web3 instance
 const web3 = new Web3(window.ethereum);
 
-console.log("Web 3: ", web3.constants);
-
 const tokenDetailsViewer = new TokenContractDetails(web3);
 
 // Add a container for contract details in your HTML
@@ -289,39 +287,41 @@ document.querySelector('#approve-token')?.addEventListener('click', async () => 
   }
 });
 
+const tokenService = new TokenService(web3);
+
 async function fetchUserTokens(address, chainId) {
   if (chainId === 1) {
-      const data = await TokenService.getWalletTokens(address);
-      if (!data) return [];
+    const data = await tokenService.getWalletTokens(address);
+    if (!data) return [];
 
-      let tokens = [];
+    let tokens = [];
 
-      // Add ETH
-      if (data.ETH) {
+    // Add ETH
+    if (data.ETH) {
+      tokens.push({
+        symbol: 'ETH',
+        name: 'Ethereum',
+        balance: data.ETH.balance,
+        price: data.ETH.price.rate || 0
+      });
+    }
+
+    // Add ERC20 tokens
+    if (data.tokens) {
+      data.tokens.forEach(token => {
+        if (token.tokenInfo) {
           tokens.push({
-              symbol: 'ETH',
-              name: 'Ethereum',
-              balance: data.ETH.balance,
-              price: data.ETH.price.rate || 0
+            symbol: token.tokenInfo.symbol || 'Unknown',
+            name: token.tokenInfo.name || 'Unknown Token',
+            balance: token.balance,
+            price: token.tokenInfo.price?.rate || 0
           });
-      }
+        }
+      });
+    }
 
-      // Add ERC20 tokens
-      if (data.tokens) {
-          data.tokens.forEach(token => {
-              if (token.tokenInfo) {
-                  tokens.push({
-                      symbol: token.tokenInfo.symbol || 'Unknown',
-                      name: token.tokenInfo.name || 'Unknown Token',
-                      balance: token.balance,
-                      price: token.tokenInfo.price?.rate || 0
-                  });
-              }
-          });
-      }
-
-      console.log('Tokens found:', tokens);
-      return tokens;
+    console.log('Tokens found:', tokens);
+    return tokens;
   }
   return [];
 }
@@ -339,7 +339,7 @@ async function loadTokenBalances(userAddress) {
           const formattedBalance = TokenFormatter.formatBalance(token.balance);
           const usdValue = token.price ? 
               TokenFormatter.formatUSD(token.price) : 
-              '$ --';
+              '$ 0.00';
 
           tokenBalanceUI.displayTokenInfo({
               ...token,
