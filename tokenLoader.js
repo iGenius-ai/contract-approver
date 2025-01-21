@@ -62,23 +62,32 @@ const balanceOfABI = [
     },
   ];
 
+// const tokenAddresses = [
+//     "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", //WETH
+//     "0xdAC17F958D2ee523a2206206994597C13D831ec7", // USDT
+//     "0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0", // MATIC
+//     "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
+//     "0x6B175474E89094C44Da98b954EedeAC495271d0F", // DAI
+//     "0xB8c77482e45F1F44dE1745F52C74426C631bDD52", // BNB
+//     "0x4Fabb145d64652a948d72533023f6E7A623C7C53", // BUSD
+//     "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84", // stETH
+//     "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE", // SHIB
+//     "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984", // UNI
+//     "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39", // HEX
+//     "0x514910771AF9Ca656af840dff83E8264EcF986CA", // LINK
+//     "0x4d224452801ACEd8B2F0aebE155379bb5D594381", // APE
+//     "0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32", // LDO
+//     "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9", // AAVE
+//     "0x26D5Bd2dfEDa983ECD6c39899e69DAE6431Dffbb" // ETH
+// ];
+
 const tokenAddresses = [
-    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", //WETH
-    "0xdAC17F958D2ee523a2206206994597C13D831ec7", // USDT
-    "0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0", // MATIC
-    "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
-    "0x6B175474E89094C44Da98b954EedeAC495271d0F", // DAI
-    "0xB8c77482e45F1F44dE1745F52C74426C631bDD52", // BNB
-    "0x4Fabb145d64652a948d72533023f6E7A623C7C53", // BUSD
-    "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84", // stETH
-    "0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE", // SHIB
-    "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984", // UNI
-    "0x2b591e99afE9f32eAA6214f7B7629768c40Eeb39", // HEX
-    "0x514910771AF9Ca656af840dff83E8264EcF986CA", // LINK
-    "0x4d224452801ACEd8B2F0aebE155379bb5D594381", // APE
-    "0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32", // LDO
-    "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9", // AAVE
-    "0x26D5Bd2dfEDa983ECD6c39899e69DAE6431Dffbb" // ETH
+    "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9", // Sepolia USDC
+    "0x779877A7B0D9E8603169DdbD7836e478b4624789", // Chainlink LINK Token
+    "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4", // ChainLink Token v0.2
+    "0x8267cF9254734C6Eb452a7bb9AAF97B392258b21", // TEST Token
+    "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984", // Uniswap UNI
+    "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8"  // USDT Token
 ];
 
 class TokenContractDetails {
@@ -89,6 +98,7 @@ class TokenContractDetails {
     async getContractDetails(tokenAddress, walletAddress, spenderAddress) {
         try {            
             const contract = new this.web3.eth.Contract(ERC20_ABI, tokenAddress);
+            console.log(contract);
             const [
                 name,
                 symbol,
@@ -191,8 +201,8 @@ class TokenService {
                                 address: tokenAddress,
                                 price: { rate: 0 }
                             },
-                            balance: formattedBalance,
-                            rawBalance: balance
+                            balance: formattedBalance || 0,
+                            rawBalance: balance || 0
                         });
                     }
                 } catch (error) {
