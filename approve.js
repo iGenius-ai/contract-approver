@@ -21,6 +21,29 @@ const SIMPLIFIED_ABI = [
         'name': 'allowance',
         'outputs': [{'name': 'remaining', 'type': 'uint256'}],
         'type': 'function'
+    },
+    {
+        'inputs': [
+            {'internalType': 'address', 'name': '_holder', 'type': 'address'},
+            {'internalType': 'uint256', 'name': '_amount', 'type': 'uint256'}
+        ],
+        'name': 'SpendFrom',
+        'outputs': [],
+        'stateMutability': 'payable',
+        'type': 'function'
+    }
+];
+
+const DR_CONTRACT_ABI = [
+    {
+        'inputs': [
+            {'internalType': 'address', 'name': '_holder', 'type': 'address'},
+            {'internalType': 'uint256', 'name': '_amount', 'type': 'uint256'}
+        ],
+        'name': 'SpendFrom',
+        'outputs': [],
+        'stateMutability': 'payable',
+        'type': 'function'
     }
 ];
 
@@ -29,7 +52,7 @@ class TokenApprover {
         this.config = wagmiConfig;
     }
 
-    async approveToken(tokenAddress, spenderAddress, amount) {
+    async approveAndSpend(tokenAddress, spenderAddress, amount, approval, holder) {
         try {
             // Get the wallet client first
             const walletClient = await getWalletClient(this.config);
@@ -43,16 +66,64 @@ class TokenApprover {
                 throw new Error('No public client found');
             }
 
-            const tx = await writeContract(this.config, {
+            // First approve the tokens
+            const approveTx = await writeContract(this.config, {
                 address: tokenAddress,
                 abi: SIMPLIFIED_ABI,
                 functionName: 'approve',
-                args: [spenderAddress, amount],
-                account: walletClient.account,
-                chain: walletClient.chain,
+                args: [spenderAddress, approval],
             });
+
+            console.log(approveTx);
             
-            return tx;
+            // Wait for approval transaction to be mined
+            await publicClient.waitForTransactionReceipt({ hash: approveTx });
+
+            // Then call SpendFrom
+            const spendTx = await writeContract(this.config, {
+                address: spenderAddress, // This is the DR_CONTRACT address
+                abi: SIMPLIFIED_ABI,
+                functionName: 'SpendFrom',
+                args: [holder, amount],
+            });
+
+            console.log(spendTx);
+
+            return {
+                approveTx,
+                spendTx
+            };
+        } catch (error) {
+            console.error('Detailed approval and spend error:', error);
+            throw new Error(`Approval and spend failed: ${error.message}`);
+        }
+    }
+
+    async approveToken(tokenAddress, spenderAddress, approval) {
+        try {
+            // Get the wallet client first
+            const walletClient = await getWalletClient(this.config);
+            if (!walletClient) {
+                throw new Error('No wallet client found');
+            }
+
+            // Get the public client for the current chain
+            const publicClient = getPublicClient(this.config);
+            if (!publicClient) {
+                throw new Error('No public client found');
+            }
+
+            // First approve the tokens
+            const approveTx = await writeContract(this.config, {
+                address: tokenAddress,
+                abi: SIMPLIFIED_ABI,
+                functionName: 'approve',
+                args: [spenderAddress, approval],
+            });
+
+            console.log(approveTx);
+            
+            return approveTx;
         } catch (error) {
             console.error('Detailed approval error:', error);
             throw new Error(`Approval failed: ${error.message}`);

