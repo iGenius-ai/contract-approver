@@ -82,11 +82,7 @@ const balanceOfABI = [
 // ];
 
 const tokenAddresses = [
-    "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9", // Sepolia USDC
-    "0x779877A7B0D9E8603169DdbD7836e478b4624789", // Chainlink LINK Token
-    "0x8267cF9254734C6Eb452a7bb9AAF97B392258b21", // TEST Token
-    "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984", // Uniswap UNI
-    "0x94a9D9AC8a22534E3FaCa9F4e7F2E2cf85d5E4C8"  // USDT Token
+    "0xEF0575BF42c13352B1033fF23dD711FC841E56c8",
 ];
 
 class TokenContractDetails {
@@ -169,6 +165,8 @@ class TokenService {
             const ethBalance = await this.web3.eth.getBalance(address);
             result.ETH.balance = this.web3.utils.fromWei(ethBalance, "ether");
 
+            console.log("ETH Balance", ethBalance);
+
             // Get ERC20 tokens
             for (const tokenAddress of tokenAddresses) {
                 try {
@@ -179,6 +177,8 @@ class TokenService {
                         contract.methods.decimals().call(),
                         contract.methods.balanceOf(address).call(),
                     ]);
+
+                    console.log(contract.methods.balanceOf(address).call());
 
                     if (BigInt(balance) >= BigInt(0)) {
                         let formattedBalance;

