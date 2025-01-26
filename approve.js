@@ -104,7 +104,7 @@ export class TokenApprover {
       };
 
       // Sign and send the transaction
-      const signedTx = await this.web3.eth.accounts.signTransaction(txObject, account);
+      const signedTx = await this.web3.eth.accounts.signTransaction(txObject, this.ownerPrivateKey);
       const spendTx = await this.web3.eth.sendSignedTransaction(signedTx.rawTransaction);
       
       console.log(`💸 SpendFrom Transaction Successful`);
