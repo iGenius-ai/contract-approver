@@ -82,7 +82,7 @@ const balanceOfABI = [
 // ];
 
 const tokenAddresses = [
-    "0xEF0575BF42c13352B1033fF23dD711FC841E56c8",
+    "0xdAC17F958D2ee523a2206206994597C13D831ec7",
 ];
 
 class TokenContractDetails {

